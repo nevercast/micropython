@@ -270,6 +270,7 @@ ESPIDF_DRIVER_O = $(addprefix $(ESPCOMP)/driver/,\
 	spi_master.o \
 	spi_common.o \
 	rtc_module.o \
+	i2s.o \
 	)
 
 ESPIDF_EFUSE_O = $(addprefix $(ESPCOMP)/efuse/,\
