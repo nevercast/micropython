@@ -1076,6 +1076,7 @@ STATIC void type_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
 const mp_obj_type_t mp_type_type = {
     { &mp_type_type },
     .name = MP_QSTR_type,
+    .parent = &mp_type_object,
     .print = type_print,
     .make_new = type_make_new,
     .call = type_call,

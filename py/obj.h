@@ -517,8 +517,8 @@ struct _mp_obj_type_t {
     const void *protocol;
 
     // A pointer to the parents of this type:
-    //  - 0 parents: pointer is NULL (object is implicitly the single parent)
-    //  - 1 parent: a pointer to the type of that parent
+    //  - 0 parents: pointer is NULL (mp_type_object has no parent)
+    //  - 1 parent: a pointer to the type of that parent (object by default)
     //  - 2 or more parents: pointer to a tuple object containing the parent types
     const void *parent;
 
