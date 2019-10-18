@@ -36,3 +36,6 @@ print(B.__bases__[0] == object)
 print(C.__bases__[0] == B)
 print(D.__bases__[0] == C)
 print(D.__bases__[1] == A)
+
+# Object has an empty tuple
+print(object.__bases__ == tuple())

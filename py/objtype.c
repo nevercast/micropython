@@ -1016,6 +1016,10 @@ STATIC void type_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
         }
         if (attr == MP_QSTR___bases__) {
             mp_obj_t parent_obj = self->parent ? MP_OBJ_FROM_PTR(self->parent) : MP_OBJ_FROM_PTR(&mp_type_object);
+            if (self == &mp_type_object) {
+                dest[0] = mp_obj_new_tuple(0, NULL);
+                return;
+            }
             #if MICROPY_MULTIPLE_INHERITANCE
             if (mp_obj_is_type(parent_obj, &mp_type_tuple)) {
                 dest[0] = parent_obj;
