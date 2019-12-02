@@ -47,6 +47,11 @@ STATIC mp_obj_t reversed_make_new(const mp_obj_type_t *type, size_t n_args, size
         return mp_call_method_n_kw(0, 0, dest);
     }
 
+    // prohibit dict
+    if (mp_obj_is_type(args[0], &mp_type_dict)) {
+        mp_raise_TypeError("'dict' object is not reversible");
+    }
+
     mp_obj_reversed_t *o = m_new_obj(mp_obj_reversed_t);
     o->base.type = type;
     o->seq = args[0];
