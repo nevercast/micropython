@@ -54,6 +54,21 @@ STATIC mp_map_elem_t *dict_iter_next(mp_obj_dict_t *dict, size_t *cur) {
     return NULL;
 }
 
+#if MICROPY_PY_COLLECTIONS_ORDEREDDICT
+// Implement reversed iterator seperately as to not cascade a larger implementation
+// to everywhere that iterates forwards (the usual case).
+STATIC mp_map_elem_t *dict_iter_reversed_next(mp_obj_dict_t *dict, size_t *cur) {
+    mp_map_t *map = &dict->map;
+    for (size_t i = *cur; i != -1; i--) {
+        if (mp_map_slot_is_filled(map, i)) {
+            *cur = i - 1;
+            return &(map->table[i]);
+        }
+    }
+    return NULL;
+}
+#endif
+
 STATIC void dict_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
     mp_obj_dict_t *self = MP_OBJ_TO_PTR(self_in);
     bool first = true;
@@ -393,9 +408,16 @@ typedef enum _mp_dict_view_kind_t {
     MP_DICT_VIEW_ITEMS,
     MP_DICT_VIEW_KEYS,
     MP_DICT_VIEW_VALUES,
+#if MICROPY_PY_COLLECTIONS_ORDEREDDICT
+    MP_DICT_VIEW_KEYS_REVERSED
+#endif
 } mp_dict_view_kind_t;
 
-STATIC const char *const mp_dict_view_names[] = {"dict_items", "dict_keys", "dict_values"};
+STATIC const char *const mp_dict_view_names[] = {"dict_items", "dict_keys", "dict_values"
+#if MICROPY_PY_COLLECTIONS_ORDEREDDICT
+    , "dict_keys_reversed"
+#endif
+};
 
 typedef struct _mp_obj_dict_view_it_t {
     mp_obj_base_t base;
@@ -413,6 +435,21 @@ typedef struct _mp_obj_dict_view_t {
 STATIC mp_obj_t dict_view_it_iternext(mp_obj_t self_in) {
     mp_check_self(mp_obj_is_type(self_in, &dict_view_it_type));
     mp_obj_dict_view_it_t *self = MP_OBJ_TO_PTR(self_in);
+
+    // This implementation makes some strong assumptions about the dict view iterating forward.
+    // I have not refactored the dict view implementations to optimize code reuse with regards
+    // to supporting reversed() on ordered dicts.
+#if MICROPY_PY_COLLECTIONS_ORDEREDDICT
+    if (self->kind == MP_DICT_VIEW_KEYS_REVERSED) {
+        mp_map_elem_t *next = dict_iter_reversed_next(MP_OBJ_TO_PTR(self->dict), &self->cur);
+        if (next == NULL) {
+            return MP_OBJ_STOP_ITERATION;
+        } else {
+            return next->key;
+        }
+    }
+#endif
+
     mp_map_elem_t *next = dict_iter_next(MP_OBJ_TO_PTR(self->dict), &self->cur);
 
     if (next == NULL) {
@@ -447,7 +484,12 @@ STATIC mp_obj_t dict_view_getiter(mp_obj_t view_in, mp_obj_iter_buf_t *iter_buf)
     o->base.type = &dict_view_it_type;
     o->kind = view->kind;
     o->dict = view->dict;
+#if MICROPY_PY_COLLECTIONS_ORDEREDDICT
+    // The iterator starts at the end of the sequence if we are going in reverse.
+    o->cur = (view->kind == MP_DICT_VIEW_KEYS_REVERSED) ? mp_obj_get_int(mp_obj_len(view->dict)) : 0;
+#else
     o->cur = 0;
+#endif
     return MP_OBJ_FROM_PTR(o);
 }
 
@@ -519,6 +561,16 @@ STATIC mp_obj_t dict_values(mp_obj_t self_in) {
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(dict_values_obj, dict_values);
 
+#if MICROPY_PY_COLLECTIONS_ORDEREDDICT
+STATIC mp_obj_t ordereddict_keys_reversed(mp_obj_t self_in) {
+    mp_obj_iter_buf_t *iter_buf = m_new_obj(mp_obj_iter_buf_t);
+    mp_obj_t dict_view_reversed = dict_view(self_in, MP_DICT_VIEW_KEYS_REVERSED);
+    mp_check_self(mp_obj_is_type(dict_view_reversed, &dict_view_type));
+    return dict_view_getiter(dict_view_reversed, iter_buf);
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(ordereddict_keys_reversed_obj, ordereddict_keys_reversed);
+#endif
+
 /******************************************************************************/
 /* dict iterator                                                              */
 
@@ -570,6 +622,28 @@ const mp_obj_type_t mp_type_dict = {
 };
 
 #if MICROPY_PY_COLLECTIONS_ORDEREDDICT
+STATIC const mp_rom_map_elem_t dict_locals_ordereddict_table[] = {
+    { MP_ROM_QSTR(MP_QSTR_clear), MP_ROM_PTR(&dict_clear_obj) },
+    { MP_ROM_QSTR(MP_QSTR_copy), MP_ROM_PTR(&dict_copy_obj) },
+    #if MICROPY_PY_BUILTINS_DICT_FROMKEYS
+    { MP_ROM_QSTR(MP_QSTR_fromkeys), MP_ROM_PTR(&dict_fromkeys_obj) },
+    #endif
+    { MP_ROM_QSTR(MP_QSTR_get), MP_ROM_PTR(&dict_get_obj) },
+    { MP_ROM_QSTR(MP_QSTR_items), MP_ROM_PTR(&dict_items_obj) },
+    { MP_ROM_QSTR(MP_QSTR_keys), MP_ROM_PTR(&dict_keys_obj) },
+    { MP_ROM_QSTR(MP_QSTR_pop), MP_ROM_PTR(&dict_pop_obj) },
+    { MP_ROM_QSTR(MP_QSTR_popitem), MP_ROM_PTR(&dict_popitem_obj) },
+    { MP_ROM_QSTR(MP_QSTR_setdefault), MP_ROM_PTR(&dict_setdefault_obj) },
+    { MP_ROM_QSTR(MP_QSTR_update), MP_ROM_PTR(&dict_update_obj) },
+    { MP_ROM_QSTR(MP_QSTR_values), MP_ROM_PTR(&dict_values_obj) },
+    { MP_ROM_QSTR(MP_QSTR___getitem__), MP_ROM_PTR(&mp_op_getitem_obj) },
+    { MP_ROM_QSTR(MP_QSTR___setitem__), MP_ROM_PTR(&mp_op_setitem_obj) },
+    { MP_ROM_QSTR(MP_QSTR___delitem__), MP_ROM_PTR(&mp_op_delitem_obj) },
+    { MP_ROM_QSTR(MP_QSTR___reversed__), MP_ROM_PTR(&ordereddict_keys_reversed_obj) },
+};
+
+STATIC MP_DEFINE_CONST_DICT(dict_locals_ordereddict, dict_locals_ordereddict_table);
+
 const mp_obj_type_t mp_type_ordereddict = {
     { &mp_type_type },
     .name = MP_QSTR_OrderedDict,
@@ -580,7 +654,7 @@ const mp_obj_type_t mp_type_ordereddict = {
     .subscr = dict_subscr,
     .getiter = dict_getiter,
     .parent = &mp_type_dict,
-    .locals_dict = (mp_obj_dict_t*)&dict_locals_dict,
+    .locals_dict = (mp_obj_dict_t*)&dict_locals_ordereddict,
 };
 #endif
 
